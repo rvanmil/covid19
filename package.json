@@ -1,0 +1,26 @@
+{
+  "name": "covid19",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "René van Mil <rvanmil@me.com>",
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint .",
+    "start": "node index.js"
+  },
+  "eslintConfig": {
+    "extends": "oliver-base"
+  },
+  "dependencies": {
+    "csv-parse": "^4.8.8",
+    "date-fns": "^2.10.0",
+    "dotenv": "^8.2.0",
+    "mongodb": "^3.5.4"
+  },
+  "devDependencies": {
+    "eslint": "^6.8.0",
+    "eslint-config-airbnb-base": "^14.0.0",
+    "eslint-config-oliver-base": "^6.3.0",
+    "eslint-plugin-import": "^2.20.1"
+  }
+}
