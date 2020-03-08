@@ -1,4 +1,4 @@
-# Process COVID-19 data an insert into MongoDB
+# Process COVID-19 data and insert into MongoDB
 
 Quick and dirty script which inserts the Novel Coronavirus (COVID-19) Cases, provided by JHU CSSE data from [this repo](https://github.com/CSSEGISandData/COVID-19) into MongoDB.
 
