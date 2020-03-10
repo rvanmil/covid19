@@ -14,8 +14,6 @@ require('dotenv').config()
 const dbUrl = process.env.MONGODB_URI
 const googleApiKey = process.env.GOOGLE_API_KEY
 
-const updateLocationData = false
-
 const readData = file => new Promise((resolve, reject) => {
 	const output = []
 	const csvparser = csvparse({
@@ -59,21 +57,14 @@ const mapCsvRecord = csvRecord => Object.entries(csvRecord).reduce((acc, [key, v
 }, [])
 
 const uploadData = async () => {
-	let client
-	let db
-	if (dbUrl) {
-		client = await MongoClient.connect(dbUrl, { useNewUrlParser: true, useUnifiedTopology: true })
-		db = client.db()
-	}
+	// Read records from CSV files and merge them
 	const csvRecordsConfirmed = await readData('./COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv')
 	const recordsConfirmed = csvRecordsConfirmed.flatMap(mapCsvRecord)
 	const csvRecordsDeaths = await readData('./COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv')
 	const recordsDeaths = csvRecordsDeaths.flatMap(mapCsvRecord)
 	const csvRecordsRecovered = await readData('./COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv')
 	const recordsRecovered = csvRecordsRecovered.flatMap(mapCsvRecord)
-
 	const recordsMap = new Map()
-
 	recordsConfirmed.forEach((record) => {
 		const { count, ...rest } = record
 		const key = `${record.location.coordinates[0]}|${record.location.coordinates[1]}|${record.date}`
@@ -84,7 +75,6 @@ const uploadData = async () => {
 		updatedRecord.countConfirmed = count
 		recordsMap.set(key, updatedRecord)
 	})
-
 	recordsDeaths.forEach((record) => {
 		const { count, ...rest } = record
 		const key = `${record.location.coordinates[0]}|${record.location.coordinates[1]}|${record.date}`
@@ -95,7 +85,6 @@ const uploadData = async () => {
 		updatedRecord.countDeaths = count
 		recordsMap.set(key, updatedRecord)
 	})
-
 	recordsRecovered.forEach((record) => {
 		const { count, ...rest } = record
 		const key = `${record.location.coordinates[0]}|${record.location.coordinates[1]}|${record.date}`
@@ -106,38 +95,42 @@ const uploadData = async () => {
 		updatedRecord.countRecovered = count
 		recordsMap.set(key, updatedRecord)
 	})
-
 	const records = [...recordsMap.values()]
-	const locationDataJson = fs.readFileSync(join(__dirname, 'locationData.json'))
-	let locationData = JSON.parse(locationDataJson)
 
 	// Collect unique coordinates and query Google for location data
-	if (updateLocationData) {
-		const coordinatesMap = records.reduce((acc, record) => {
-			const key = `${record.location.coordinates[0]}|${record.location.coordinates[1]}`
+	const locationDataJson = fs.readFileSync(join(__dirname, 'locationData.json'))
+	const savedLocationData = JSON.parse(locationDataJson)
+	const newCoordinatesMap = records.reduce((acc, record) => {
+		const key = `${record.location.coordinates[0]}|${record.location.coordinates[1]}`
+		if (!savedLocationData[key]) { // Ignore keys that were already fetched
 			acc.set(key, {
 				lng: record.location.coordinates[0],
 				lat: record.location.coordinates[1]
 			})
-			return acc
-		}, new Map())
-		const coordinates = [...coordinatesMap.values()]
-		const locationDataMap = new Map()
-		for (const coordinate of coordinates) {
-			const key = `${coordinate.lng}|${coordinate.lat}`
-			const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?key=${googleApiKey}&latlng=${coordinate.lat},${coordinate.lng}&result_type=country`)
-			const json = await res.json()
-			try {
-				const countryShortName = json.results[0].address_components[0].short_name
-				locationDataMap.set(key, countryShortName)
-			} catch (err) {
-				console.warn('Could not geocode coordinate', coordinate)
-			}
 		}
-		locationData = Object.fromEntries(locationDataMap)
-		fs.writeFileSync(join(__dirname, 'locationData.json'), JSON.stringify(locationData))
+		return acc
+	}, new Map())
+	const coordinates = [...newCoordinatesMap.values()]
+	const newLocationDataMap = new Map()
+	for (const coordinate of coordinates) {
+		const key = `${coordinate.lng}|${coordinate.lat}`
+		const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?key=${googleApiKey}&latlng=${coordinate.lat},${coordinate.lng}&result_type=country`)
+		const json = await res.json()
+		try {
+			const countryShortName = json.results[0].address_components[0].short_name
+			newLocationDataMap.set(key, countryShortName)
+		} catch (err) {
+			console.warn('Could not geocode coordinate', coordinate)
+		}
 	}
+	const newLocationData = Object.fromEntries(newLocationDataMap)
+	const updatedLocationData = {
+		...savedLocationData,
+		...newLocationData
+	}
+	fs.writeFileSync(join(__dirname, 'locationData.json'), JSON.stringify(updatedLocationData))
 
+	// Add calculated props to records
 	const recordsWithCalculatedProps = records.map((record) => {
 		// Count sick
 		const countConfirmed = record.countConfirmed || 0
@@ -147,7 +140,7 @@ const uploadData = async () => {
 
 		// Continent (treat China as a separate continent)
 		const locationKey = `${record.location.coordinates[0]}|${record.location.coordinates[1]}`
-		const countryShortName = locationData[locationKey]
+		const countryShortName = updatedLocationData[locationKey]
 		const continent = (countryShortName === 'CN') ? 'China' : continentData[countryShortName] || 'Others'
 		return {
 			...record,
@@ -156,10 +149,12 @@ const uploadData = async () => {
 		}
 	})
 
-	await db.collection('cases').deleteMany({})
-	await db.collection('cases').insertMany(recordsWithCalculatedProps)
-
-	if (client) {
+	// Save records in MongoDB
+	if (dbUrl) {
+		const client = await MongoClient.connect(dbUrl, { useNewUrlParser: true, useUnifiedTopology: true })
+		const db = client.db()
+		await db.collection('cases').deleteMany({})
+		await db.collection('cases').insertMany(recordsWithCalculatedProps)
 		await client.close()
 	}
 }
