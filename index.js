@@ -120,7 +120,7 @@ const uploadData = async () => {
 			const countryShortName = json.results[0].address_components[0].short_name
 			newLocationDataMap.set(key, countryShortName)
 		} catch (err) {
-			console.warn('Could not geocode coordinate', coordinate, err)
+			console.warn('Could not geocode coordinate', coordinate, json)
 		}
 	}
 	const newLocationData = Object.fromEntries(newLocationDataMap)
