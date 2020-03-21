@@ -128,7 +128,7 @@ const uploadData = async () => {
 		...savedLocationData,
 		...newLocationData
 	}
-	fs.writeFileSync(join(__dirname, 'locationData.json'), JSON.stringify(updatedLocationData))
+	fs.writeFileSync(join(__dirname, 'locationData.json'), JSON.stringify(updatedLocationData, null, 2))
 
 	// Add calculated props to records
 	const recordsWithCalculatedProps = records.map((record) => {
