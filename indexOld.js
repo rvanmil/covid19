@@ -41,18 +41,11 @@ const readData = file => new Promise((resolve, reject) => {
 const mapCsvRecord = csvRecord => Object.entries(csvRecord).reduce((acc, [key, value], index) => {
 	if (index > 3) {
 		const date = parse(key, 'M/d/yy', new Date())
-		let lng = parseFloat(csvRecord.Long)
-		let lat = parseFloat(csvRecord.Lat)
-		// Fix for 0,0 coordinates
-		if (lng === 0 && lat === 0) {
-			lng = -106.3467712
-			lat = 56.1303673
-		}
 		acc.push({
 			country: csvRecord['Country/Region'],
 			location: {
 				type: 'Point',
-				coordinates: [lng, lat]
+				coordinates: [parseFloat(csvRecord.Long), parseFloat(csvRecord.Lat)]
 			},
 			date,
 			count: parseInt(value, 10),
@@ -64,10 +57,12 @@ const mapCsvRecord = csvRecord => Object.entries(csvRecord).reduce((acc, [key, v
 
 const uploadData = async () => {
 	// Read records from CSV files and merge them
-	const csvRecordsConfirmed = await readData('./COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv')
+	const csvRecordsConfirmed = await readData('./COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv')
 	const recordsConfirmed = csvRecordsConfirmed.flatMap(mapCsvRecord)
-	const csvRecordsDeaths = await readData('./COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv')
+	const csvRecordsDeaths = await readData('./COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv')
 	const recordsDeaths = csvRecordsDeaths.flatMap(mapCsvRecord)
+	const csvRecordsRecovered = await readData('./COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv')
+	const recordsRecovered = csvRecordsRecovered.flatMap(mapCsvRecord)
 	const recordsMap = new Map()
 	recordsConfirmed.forEach((record) => {
 		const { count, ...rest } = record
@@ -87,6 +82,16 @@ const uploadData = async () => {
 			updatedRecord = rest
 		}
 		updatedRecord.countDeaths = count
+		recordsMap.set(key, updatedRecord)
+	})
+	recordsRecovered.forEach((record) => {
+		const { count, ...rest } = record
+		const key = `${record.location.coordinates[0]}|${record.location.coordinates[1]}|${record.date}`
+		let updatedRecord = recordsMap.get(key)
+		if (!updatedRecord) {
+			updatedRecord = rest
+		}
+		updatedRecord.countRecovered = count
 		recordsMap.set(key, updatedRecord)
 	})
 	const records = [...recordsMap.values()]
@@ -126,13 +131,20 @@ const uploadData = async () => {
 
 	// Add calculated props to records
 	const recordsWithCalculatedProps = records.map((record) => {
+		// Count sick
+		const countConfirmed = record.countConfirmed || 0
+		const countDeaths = record.countDeaths || 0
+		const countRecovered = record.countRecovered || 0
+		const countSick = countConfirmed - countDeaths - countRecovered
+
 		// Continent (treat China as a separate continent)
 		const locationKey = `${record.location.coordinates[0]}|${record.location.coordinates[1]}`
 		const countryShortName = updatedLocationData[locationKey]
 		const continent = (countryShortName === 'CN') ? 'China' : continentData[countryShortName] || 'Others'
 		return {
 			...record,
-			continent
+			continent,
+			countSick
 		}
 	})
 
