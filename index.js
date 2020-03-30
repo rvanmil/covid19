@@ -5,7 +5,7 @@ const { MongoClient } = require('mongodb')
 const fs = require('fs')
 const { join } = require('path')
 const csvparse = require('csv-parse')
-const { parse } = require('date-fns')
+const { addHours, parse } = require('date-fns')
 const fetch = require('node-fetch')
 const continentData = require('./continentData')
 
@@ -40,7 +40,8 @@ const readData = file => new Promise((resolve, reject) => {
 
 const mapCsvRecord = csvRecord => Object.entries(csvRecord).reduce((acc, [key, value], index) => {
 	if (index > 3) {
-		const date = parse(key, 'M/d/yy', new Date())
+		const date = addHours(parse(key, 'M/d/yy', new Date()), 2)
+		console.log(date)
 		let lng = parseFloat(csvRecord.Long)
 		let lat = parseFloat(csvRecord.Lat)
 		// Fix for 0,0 coordinates
