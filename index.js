@@ -41,7 +41,6 @@ const readData = file => new Promise((resolve, reject) => {
 const mapCsvRecord = csvRecord => Object.entries(csvRecord).reduce((acc, [key, value], index) => {
 	if (index > 3) {
 		const date = addHours(parse(key, 'M/d/yy', new Date()), 2)
-		console.log(date)
 		let lng = parseFloat(csvRecord.Long)
 		let lat = parseFloat(csvRecord.Lat)
 		// Fix for 0,0 coordinates
