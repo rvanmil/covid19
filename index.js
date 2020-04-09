@@ -38,29 +38,38 @@ const readData = file => new Promise((resolve, reject) => {
 	readStream.pipe(csvparser)
 })
 
-const mapCsvRecord = csvRecord => Object.entries(csvRecord).reduce((acc, [key, value], index) => {
-	if (index > 3) {
-		const date = addHours(parse(key, 'M/d/yy', new Date()), 2)
-		let lng = parseFloat(csvRecord.Long)
-		let lat = parseFloat(csvRecord.Lat)
-		// Fix for 0,0 coordinates
-		if (lng === 0 && lat === 0) {
-			lng = -106.3467712
-			lat = 56.1303673
+const mapCsvRecord = (csvRecord) => {
+	let previousCount = 0
+	return Object.entries(csvRecord).reduce((acc, [key, value], index) => {
+		if (index > 3) {
+			const date = addHours(parse(key, 'M/d/yy', new Date()), 2)
+			let lng = parseFloat(csvRecord.Long)
+			let lat = parseFloat(csvRecord.Lat)
+			// Fix for 0,0 coordinates
+			if (lng === 0 && lat === 0) {
+				lng = -106.3467712
+				lat = 56.1303673
+			}
+			const count = parseInt(value, 10)
+			const growth = count - previousCount
+			acc.push({
+				country: csvRecord['Country/Region'],
+				location: {
+					type: 'Point',
+					coordinates: [lng, lat]
+				},
+				date,
+				count,
+				growth,
+				isCurrent: (index === Object.entries(csvRecord).length - 1)
+			})
+			previousCount = count
+		} else {
+			previousCount = 0
 		}
-		acc.push({
-			country: csvRecord['Country/Region'],
-			location: {
-				type: 'Point',
-				coordinates: [lng, lat]
-			},
-			date,
-			count: parseInt(value, 10),
-			isCurrent: (index === Object.entries(csvRecord).length - 1)
-		})
-	}
-	return acc
-}, [])
+		return acc
+	}, [])
+}
 
 const uploadData = async () => {
 	// Read records from CSV files and merge them
